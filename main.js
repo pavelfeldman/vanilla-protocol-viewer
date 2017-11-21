@@ -1,11 +1,13 @@
-let PROTOCOLS = {
+let PROTOCOLS = [
 /**
   'browser_protocol.json':  './browser_protocol.json',
   'js_protocol.json':  './js_protocol.json',
  * */
-  'browser_protocol.json':  'https://cdn.rawgit.com/ChromeDevTools/devtools-protocol/master/json/browser_protocol.json',
-  'js_protocol.json':  'https://cdn.rawgit.com/ChromeDevTools/devtools-protocol/master/json/js_protocol.json',
-};
+  {name: 'stable (1.2)', url: 'https://cdn.rawgit.com/ChromeDevTools/debugger-protocol-viewer/master/_data/1-2/protocol.json'},
+  {name: 'stable RC (1.3)', url: 'https://cdn.rawgit.com/ChromeDevTools/debugger-protocol-viewer/master/_data/1-3/protocol.json'},
+  {name: 'tip-of-tree', url: 'https://cdn.rawgit.com/ChromeDevTools/debugger-protocol-viewer/master/_data/tot/protocol.json'},
+  {name: 'v8-inspector', url: 'https://cdn.rawgit.com/ChromeDevTools/debugger-protocol-viewer/master/_data/v8/protocol.json'},
+];
 
 document.addEventListener('DOMContentLoaded', () => {
   let sidebar = document.getElementById('sidebar');
@@ -22,6 +24,8 @@ class App {
   constructor(sidebarElement, contentElement) {
     this._sidebarElement = sidebarElement;
     this._contentElement = contentElement;
+    /** @type {!Map<string, !Object>} */
+    this._protocols = new Map();
     /** @type {!Map<string, !Object>} */
     this._domains = new Map();
     /** @type {!Map<string, !Object>} */
@@ -122,17 +126,17 @@ class App {
   }
 
   async _initialize() {
-    let protocols = await Promise.all(Object.values(PROTOCOLS).map(url => fetch(url).then(r => r.json())));
+    let protocols = await Promise.all(PROTOCOLS.map(item => fetch(item.url).then(r => r.json())));
+    for (let i = 0; i < PROTOCOLS.length; ++i)
+      this._protocols.set(PROTOCOLS[i].name, App._normalize(protocols[i]));
 
-    this._allDomains.clear();
-    this._stableDomains.clear();
-
-    let protocol = App._normalize({domains: [].concat(...protocols.map(p => p.domains))});
-    for (let domain of protocol.domains) {
-      this._allDomains.set(domain.domain, domain);
-      if (!domain.experimental)
-        this._stableDomains.set(domain.domain, App._stabilize(domain));
-    }
+    let select = document.getElementById('version-select');
+    for (let protocol of PROTOCOLS)
+      select.appendChild(new Option(protocol.name));
+    select.addEventListener('change', () => {
+      window.localStorage['version'] = select.value;
+      this._renderDomains();
+    });
 
     document.body.classList.toggle('experimental-enabled', window.localStorage['experimental'] !== 'false');
     document.getElementById('experimental').addEventListener('click', () => {
@@ -141,10 +145,23 @@ class App {
       this._renderDomains();
     });
 
+    if (!window.localStorage['version'])
+      window.localStorage['version'] = PROTOCOLS[0].name;
     this._renderDomains();
   }
 
   _renderDomains() {
+    this._allDomains.clear();
+    this._stableDomains.clear();
+    var protocol = this._protocols.get(window.localStorage['version']);
+    if (!protocol)
+      protocol = { domains: [] };
+    for (let domain of protocol.domains) {
+      this._allDomains.set(domain.domain, domain);
+      if (!domain.experimental)
+        this._stableDomains.set(domain.domain, App._stabilize(domain));
+    }
+
     this._domains = window.localStorage['experimental'] === 'false' ? this._stableDomains : this._allDomains;
     this._search.setDomains(Array.from(this._domains.values()));
     this._renderSidebar(this._domains);
@@ -190,7 +207,7 @@ class App {
 
   _renderSidebar(domains) {
     let domainNames = Array.from(domains.keys());
-    let sidebar = document.getElementById('sidebar');
+    let sidebar = document.getElementById('sidebar-list');
     sidebar.textContent = '';
     for (let name of domainNames) {
       let a = sidebar.a('#' + name, name);

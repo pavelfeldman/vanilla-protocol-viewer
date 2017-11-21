@@ -413,3 +413,18 @@ span.deprecated {
 .method:not(:last-child), .type:not(:last-child) {
   border-bottom: solid #B6B6B6 1px;
 }
+
+#version {
+  min-height: 51px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#version-select {
+  border: 0;
+  outline: 0;
+  flex: auto;
+  height: 50px;
+  font-size: 18px;
+}
